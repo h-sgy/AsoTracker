@@ -1,20 +1,20 @@
 # AsoTracker
 
-A personal macOS app for tracking App Store keyword rankings for your own apps — a self-hosted replacement for paid ASO tools.
+自分のアプリの App Store キーワード順位を追跡する、個人用の macOS アプリです。有料の ASO ツールを置き換えるために作りました。
 
-- Daily/weekly rank checks across 58 App Store storefronts
-- Keyword popularity from Apple Search Ads (your own account)
-- Rank history charts, top-5 competing apps per keyword, notes and tags
-- One-time import of your data from [Astro](https://tryastro.app)
-- Everything stays in a local SQLite file
+- 58 か国の App Store で順位を確認（重要な語は毎日、それ以外は週 1 回）
+- Apple Search Ads（自分のアカウント）からキーワードの人気度を取得
+- 順位推移グラフ、キーワードごとの上位 5 アプリ、メモ、タグ
+- [Astro](https://tryastro.app) からデータを一括で取り込み
+- データはすべてローカルの SQLite ファイルに保存
 
-## Requirements
+## 必要なもの
 
-- macOS 15+
-- Xcode 16+
-- [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
+- macOS 15 以降
+- Xcode 16 以降
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen)（`brew install xcodegen`）
 
-## Build
+## ビルド
 
 ```sh
 xcodegen generate
@@ -22,47 +22,48 @@ xcodebuild -project AsoTracker.xcodeproj -scheme AsoTracker -derivedDataPath bui
 open build/Build/Products/Debug/AsoTracker.app
 ```
 
-Run the tests with `xcodebuild ... test` (same flags).
+テストは同じオプションで `xcodebuild ... test` を実行します。
 
-## Usage
+## 使い方
 
-- **Add an app**: "アプリを追加" at the bottom of the sidebar — search by name, App Store ID or URL.
-- **Add keywords**: "キーワードを追加" in the header — pick a storefront, one keyword per line.
-- **Popularity**: click "Search Ads" in the toolbar and sign in to Apple Search Ads in the window that opens. Popularity then refreshes weekly.
-- **Updates** run on launch and hourly while the app is open. Keywords ranked in the top 100 or tagged are checked daily, the rest weekly.
+- **アプリの追加**: サイドバー下の「アプリを追加」から。アプリ名、App Store の ID、URL のどれでも検索できます。
+- **キーワードの追加**: ヘッダーの「キーワードを追加」から。ストアを選び、1 行に 1 つずつ入力します。
+- **人気度**: ツールバーの「Search Ads」を押し、開いたウインドウで Apple Search Ads にログインします。以後、人気度は週 1 回更新されます。
+- **更新**: 起動時と、起動中は 1 時間ごとに自動で実行されます。100 位以内かタグ付きのキーワードは毎日、それ以外は週 1 回確認します。
+- **削除**: サイドバーのアプリ、または一覧のキーワードを右クリック（キーワードは Delete キーでも可）。
 
-### Import from Astro
+### Astro からの取り込み
 
-With Astro installed, copy one developer's apps, keywords and full ranking history (read-only on Astro's side):
+Astro がインストールされていれば、指定した開発者名のアプリ・キーワード・順位履歴をまとめてコピーできます（Astro 側のデータは読み取るだけです）。
 
 ```sh
-build/Build/Products/Debug/AsoTracker.app/Contents/MacOS/AsoTracker --import "Your Developer Name"
+build/Build/Products/Debug/AsoTracker.app/Contents/MacOS/AsoTracker --import "開発者名"
 ```
 
-### Headless rank update
+### 画面なしで順位を更新
 
 ```sh
 AsoTracker --update-ranks [--limit N]
 ```
 
-Data lives in `~/Library/Application Support/AsoTracker/aso.sqlite`.
+データは `~/Library/Application Support/AsoTracker/aso.sqlite` に保存されます。
 
-## Architecture
+## 構成
 
-| Layer | Files |
+| 層 | ファイル |
 |---|---|
-| Views (SwiftUI) | `Views.swift` |
-| View models | `LibraryModel` (browse/edit), `UpdateModel` (jobs, Search Ads session) |
-| Update flow | `Updater` — fetch, then record through the store |
-| Data access | `KeywordStore` (all SQL), `DB` (thin SQLite3 wrapper) |
-| Network | `Fetchers.swift` — App Store search, Search Ads popularity, iTunes lookup |
+| View（SwiftUI） | `Views.swift` |
+| ViewModel | `LibraryModel`（表示・編集）、`UpdateModel`（更新ジョブ・Search Ads のセッション） |
+| 更新処理 | `Updater` — 取得して、ストア経由で記録 |
+| データアクセス | `KeywordStore`（SQL はすべてここ）、`DB`（SQLite3 の薄いラッパー） |
+| 通信 | `Fetchers.swift` — App Store 検索、Search Ads の人気度、iTunes Lookup |
 
-No third-party dependencies.
+外部ライブラリには依存していません。
 
-## Caveats
+## 注意
 
-Rankings come from the App Store's own search endpoint and popularity from the Apple Search Ads web UI's internal API. Neither is a documented public API: they can change or break without notice, and you are responsible for using them in line with Apple's terms. Requests are throttled (one at a time with pauses), and popularity only works for apps owned by the signed-in Search Ads account.
+順位は App Store 自身の検索エンドポイントから、人気度は Apple Search Ads の管理画面が内部で使っている API から取得しています。どちらも公開・文書化された API ではないため、予告なく変わったり使えなくなったりする可能性があります。Apple の利用規約に沿って使うのは利用者の責任です。リクエストは 1 件ずつ間隔を空けて送っています。人気度は、ログインした Search Ads アカウントが所有するアプリについてのみ取得できます。
 
-## License
+## ライセンス
 
-MIT — see [LICENSE](LICENSE).
+MIT — [LICENSE](LICENSE) を参照してください。
