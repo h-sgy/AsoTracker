@@ -1,0 +1,29 @@
+name: AsoTracker
+options:
+  bundleIdPrefix: com.sgy
+  deploymentTarget:
+    macOS: "15.0"
+settings:
+  SWIFT_VERSION: "5.0"
+targets:
+  AsoTracker:
+    type: application
+    platform: macOS
+    sources: [Sources]
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.sgy.AsoTracker
+      GENERATE_INFOPLIST_FILE: YES
+      INFOPLIST_KEY_CFBundleDisplayName: AsoTracker
+      ENABLE_APP_SANDBOX: NO
+      ENABLE_HARDENED_RUNTIME: NO
+      CODE_SIGN_IDENTITY: "-"
+  AsoTrackerTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [Tests]
+    dependencies:
+      - target: AsoTracker
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+      TEST_HOST: "$(BUILT_PRODUCTS_DIR)/AsoTracker.app/Contents/MacOS/AsoTracker"
+      BUNDLE_LOADER: "$(TEST_HOST)"

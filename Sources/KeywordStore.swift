@@ -1,0 +1,185 @@
+import Foundation
+
+/// Every read and write of tracked data. Views and view models never see SQL.
+final class KeywordStore {
+    let db: DB
+
+    init(db: DB) { self.db = db }
+
+    // MARK: - Apps
+
+    func apps() throws -> [AppRow] {
+        var rows: [AppRow] = []
+        try db.query("""
+            SELECT a.id, a.name, count(k.id), sum(k.rank <= 10), a.icon
+            FROM apps a LEFT JOIN keywords k ON k.app_id = a.id GROUP BY a.id ORDER BY a.name
+            """) {
+            rows.append(AppRow(id: $0.text(0)!, name: $0.text(1)!, keywordCount: $0.int(2) ?? 0, top10: $0.int(3) ?? 0, icon: $0.text(4)))
+        }
+        return rows
+    }
+
+    func addApp(_ app: FoundApp) throws {
+        try db.run("INSERT OR IGNORE INTO apps(id, name, developer, platform, icon) VALUES (?, ?, ?, 'iphone', ?)",
+                   [app.id, app.name, app.developer, app.icon])
+    }
+
+    /// Removes an app with its keywords, ranking history (cascade) and ratings.
+    func deleteApp(_ id: String) throws {
+        try db.transaction {
+            try db.run("DELETE FROM keywords WHERE app_id = ?", [id])
+            try db.run("DELETE FROM ratings WHERE app_id = ?", [id])
+            try db.run("DELETE FROM apps WHERE id = ?", [id])
+        }
+    }
+
+    func appIDsMissingIcon() throws -> [String] {
+        var ids: [String] = []
+        try db.query("SELECT id FROM apps WHERE icon IS NULL") { ids.append($0.text(0)!) }
+        return ids
+    }
+
+    func setIcons(_ icons: [String: String]) throws {
+        try db.transaction {
+            for (id, url) in icons { try db.run("UPDATE apps SET icon = ? WHERE id = ?", [url, id]) }
+        }
+    }
+
+    // MARK: - Keywords
+
+    /// Stores an app tracks, most keywords first.
+    func stores(appID: String) throws -> [String] {
+        var rows: [String] = []
+        try db.query("SELECT store FROM keywords WHERE app_id = ? GROUP BY store ORDER BY count(*) DESC", [appID]) { rows.append($0.text(0)!) }
+        return rows
+    }
+
+    func keywords(appID: String, store: String) throws -> [KeywordRow] {
+        var rows: [KeywordRow] = []
+        try db.query("""
+            SELECT k.id, k.text, k.rank, k.prev_rank, k.popularity, k.astro_popularity, k.difficulty, k.apps_count, k.note,
+                   (SELECT group_concat(t.name, ', ') FROM keyword_tags kt JOIN tags t ON t.id = kt.tag_id WHERE kt.keyword_id = k.id),
+                   k.updated
+            FROM keywords k WHERE k.app_id = ? AND k.store = ?
+            """, [appID, store]) { r in
+            let rank = r.int(2) ?? 1000, prev = r.int(3) ?? rank
+            rows.append(KeywordRow(
+                id: r.int(0)!, text: r.text(1)!, rank: rank, prevRank: prev, change: prev - rank,
+                popularity: r.int(4) ?? -1, astroPopularity: r.int(5) ?? 0, difficulty: r.int(6) ?? 0,
+                appsCount: r.int(7) ?? 0, note: r.text(8) ?? "", tags: r.text(9) ?? "",
+                updated: r.double(10).map(Date.init(timeIntervalSince1970:))))
+        }
+        return rows.sorted { $0.rank < $1.rank }
+    }
+
+    /// Splits user input (lines, commas, 、) into normalized, unique keywords.
+    static func parseKeywords(_ text: String) -> [String] {
+        let words = text.split(whereSeparator: { $0.isNewline || $0 == "," || $0 == "、" })
+            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            .filter { !$0.isEmpty }
+        var seen = Set<String>()
+        return words.filter { seen.insert($0).inserted }
+    }
+
+    /// Returns how many were new.
+    func addKeywords(_ words: [String], appID: String, store: String) throws -> Int {
+        var added = 0
+        try db.transaction {
+            for w in words {
+                try db.run("INSERT OR IGNORE INTO keywords(app_id, store, text) VALUES (?, ?, ?)", [appID, store, w])
+                added += db.changes
+            }
+        }
+        return added
+    }
+
+    /// Removes keywords with their ranking history and tags (cascade).
+    func deleteKeywords(_ ids: Set<Int>) throws {
+        try db.transaction {
+            for id in ids { try db.run("DELETE FROM keywords WHERE id = ?", [id]) }
+        }
+    }
+
+    func setNote(_ note: String, keywordID: Int) throws {
+        try db.run("UPDATE keywords SET note = ? WHERE id = ?", [note.isEmpty ? nil : note, keywordID])
+    }
+
+    func term(keywordID: Int) throws -> (text: String, store: String)? {
+        var found: (String, String)?
+        try db.query("SELECT text, store FROM keywords WHERE id = ?", [keywordID]) { found = ($0.text(0)!, $0.text(1)!) }
+        return found
+    }
+
+    func topApps(keywordID: Int) throws -> [TopApp] {
+        var json: String?
+        try db.query("SELECT top_apps FROM keywords WHERE id = ?", [keywordID]) { json = $0.text(0) }
+        return TopApp.decode(json)
+    }
+
+    func setTopApps(_ apps: [TopApp], store: String, text: String) throws {
+        try db.run("UPDATE keywords SET top_apps = ? WHERE store = ? AND text = ?", [TopApp.encode(apps), store, text])
+    }
+
+    func history(keywordID: Int, since: Double) throws -> [RankPoint] {
+        var points: [RankPoint] = []
+        try db.query("SELECT date, rank FROM rankings WHERE keyword_id = ? AND date >= ? ORDER BY date", [keywordID, since]) {
+            points.append(RankPoint(date: Date(timeIntervalSince1970: $0.double(0)!), rank: $0.int(1)!))
+        }
+        return points
+    }
+
+    // MARK: - Update bookkeeping
+
+    struct Member: Equatable { let id: Int; let appID: String }
+    struct Group: Equatable { let store: String; let text: String; var members: [Member] }
+
+    /// Due keywords grouped by (store, text): one search request serves every app tracking that term.
+    func dueRankGroups(now: Double) throws -> [Group] {
+        var groups: [String: Group] = [:]
+        var dueKeys = Set<String>()
+        try db.query("""
+            SELECT k.id, k.app_id, k.store, k.text, k.rank, k.updated,
+                   EXISTS(SELECT 1 FROM keyword_tags t WHERE t.keyword_id = k.id)
+            FROM keywords k ORDER BY k.rank
+            """) { r in
+            let store = r.text(2)!, text = r.text(3)!
+            let key = store + "\u{1}" + text
+            groups[key, default: Group(store: store, text: text, members: [])].members.append(Member(id: r.int(0)!, appID: r.text(1)!))
+            if Schedule.isRankDue(rank: r.int(4), tagged: r.int(6) == 1, updated: r.double(5), now: now) { dueKeys.insert(key) }
+        }
+        return dueKeys.compactMap { groups[$0] }
+    }
+
+    /// Saves one search result for every app in the group.
+    func recordSearch(_ result: AppStoreSearch.SearchResult, for group: Group, at now: Double) throws {
+        let top = TopApp.encode(result.top)
+        try db.transaction {
+            for m in group.members {
+                let rank = AppStoreSearch.rank(of: m.appID, in: result.ids)
+                try db.run("UPDATE keywords SET prev_rank = rank, rank = ?, apps_count = ?, updated = ?, top_apps = ? WHERE id = ?",
+                           [rank, result.ids.count, now, top, m.id])
+                try db.run("INSERT INTO rankings(keyword_id, date, rank) VALUES (?, ?, ?)", [m.id, now, rank])
+            }
+        }
+    }
+
+    /// Terms whose popularity is older than `cutoff`, per store, with an owned app id to query under.
+    func duePopularity(cutoff: Double) throws -> [String: (adamID: String, terms: [String])] {
+        var byStore: [String: (adamID: String, terms: [String])] = [:]
+        try db.query("""
+            SELECT store, text, min(app_id) FROM keywords
+            WHERE pop_updated IS NULL OR pop_updated < ? GROUP BY store, text
+            """, [cutoff]) { r in
+            byStore[r.text(0)!, default: (r.text(2)!, [])].terms.append(r.text(1)!)
+        }
+        return byStore
+    }
+
+    func setPopularity(_ values: [(term: String, popularity: Int)], store: String, at now: Double) throws {
+        try db.transaction {
+            for v in values {
+                try db.run("UPDATE keywords SET popularity = ?, pop_updated = ? WHERE store = ? AND text = ?", [v.popularity, now, store, v.term])
+            }
+        }
+    }
+}
