@@ -57,7 +57,10 @@ final class UpdateModel {
     }
 
     private func runRanks() async {
-        await run("順位") { [store] progress in try await Updater.updateRanks(store: store, progress: progress) }
+        await run("順位") { [store] progress in
+            try await Updater.updateRanks(store: store, progress: progress)
+            try await Updater.updateRatings(store: store)
+        }
     }
 
     private func runPopularity() async {

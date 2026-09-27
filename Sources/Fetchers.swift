@@ -85,7 +85,10 @@ enum AppStoreSearch {
 enum AppCatalog {
     private struct Response: Decodable {
         let results: [Item]
-        struct Item: Decodable { let trackId: Int; let trackName: String; let artistName: String; let artworkUrl100: String? }
+        struct Item: Decodable {
+            let trackId: Int; let trackName: String; let artistName: String; let artworkUrl100: String?
+            let averageUserRating: Double?; let userRatingCount: Int?
+        }
     }
 
     /// Searches by name, or looks up a numeric id / apps.apple.com URL directly.
@@ -109,6 +112,13 @@ enum AppCatalog {
         guard !ids.isEmpty else { return [:] }
         let items = try await fetch(URL(string: "https://itunes.apple.com/lookup?id=\(ids.joined(separator: ","))")!)
         return Dictionary(items.compactMap { i in i.artworkUrl100.map { (String(i.trackId), $0) } }, uniquingKeysWith: { a, _ in a })
+    }
+
+    /// Current average rating and rating count per app id in one store.
+    static func ratings(ids: [String], country: String) async throws -> [String: Rating] {
+        guard !ids.isEmpty else { return [:] }
+        let items = try await fetch(URL(string: "https://itunes.apple.com/lookup?id=\(ids.joined(separator: ","))&country=\(country)")!)
+        return Dictionary(items.map { (String($0.trackId), Rating(value: $0.averageUserRating, count: $0.userRatingCount)) }, uniquingKeysWith: { a, _ in a })
     }
 
     private static func fetch(_ url: URL) async throws -> [Response.Item] {

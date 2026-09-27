@@ -62,6 +62,18 @@ final class KeywordStoreTests: XCTestCase {
         XCTAssertTrue(try store.dueRankGroups(now: Date().timeIntervalSince1970).isEmpty)
     }
 
+    func testRatingsDueDailyPerStore() throws {
+        let store = try makeStore()
+        _ = try store.addKeywords(["a"], appID: "1", store: "jp")
+        _ = try store.addKeywords(["a"], appID: "2", store: "jp")
+        _ = try store.addKeywords(["a"], appID: "1", store: "us")
+        XCTAssertEqual(try store.dueRatings(cutoff: 100).mapValues { $0.sorted() }, ["jp": ["1", "2"], "us": ["1"]])
+        try store.recordRatings(["1": Rating(value: 4.5, count: 10), "2": Rating(value: nil, count: nil)], store: "jp", at: 200)
+        XCTAssertEqual(try store.dueRatings(cutoff: 100), ["us": ["1"]])
+        XCTAssertEqual(try store.latestRating(appID: "1", store: "jp"), Rating(value: 4.5, count: 10))
+        XCTAssertEqual(try store.dueRatings(cutoff: 300).count, 2)
+    }
+
     func testDeletesCascadeToHistory() async throws {
         let store = try makeStore()
         _ = try store.addKeywords(["a", "b"], appID: "1", store: "jp")

@@ -2,7 +2,7 @@ import Foundation
 
 /// `AsoTracker` with no flags opens the app. Headless modes for setup and cron-style runs:
 ///   --import "<developer name>"   one-time copy of that developer's apps from Astro
-///   --update-ranks [--limit N]    check due rankings and exit
+///   --update-ranks [--limit N]    check due rankings and ratings, then exit
 @main
 enum Entry {
     static func main() {
@@ -28,6 +28,7 @@ enum Entry {
                         if done % 50 == 0 || done == total { print("ranks \(done)/\(total)") }
                     }
                     print("checked \(n) search terms")
+                    try await Updater.updateRatings(store: KeywordStore(db: db))
                 }
                 exit(0)
             } catch {

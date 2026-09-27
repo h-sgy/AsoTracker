@@ -128,7 +128,34 @@ final class KeywordStore {
         return points
     }
 
+    /// Latest recorded rating for an app in one store.
+    func latestRating(appID: String, store: String) throws -> Rating? {
+        var found: Rating?
+        try db.query("SELECT rating, count FROM ratings WHERE app_id = ? AND store = ? ORDER BY date DESC LIMIT 1", [appID, store]) {
+            found = Rating(value: $0.double(0), count: $0.int(1))
+        }
+        return found
+    }
+
     // MARK: - Update bookkeeping
+
+    /// App ids per store whose rating was last recorded before `cutoff` (or never).
+    func dueRatings(cutoff: Double) throws -> [String: [String]] {
+        var byStore: [String: [String]] = [:]
+        try db.query("""
+            SELECT DISTINCT k.store, k.app_id FROM keywords k
+            WHERE NOT EXISTS(SELECT 1 FROM ratings r WHERE r.app_id = k.app_id AND r.store = k.store AND r.date >= ?)
+            """, [cutoff]) { byStore[$0.text(0)!, default: []].append($0.text(1)!) }
+        return byStore
+    }
+
+    func recordRatings(_ ratings: [String: Rating], store: String, at now: Double) throws {
+        try db.transaction {
+            for (id, r) in ratings {
+                try db.run("INSERT INTO ratings(app_id, store, date, rating, count) VALUES (?, ?, ?, ?, ?)", [id, store, now, r.value, r.count])
+            }
+        }
+    }
 
     struct Member: Equatable { let id: Int; let appID: String }
     struct Group: Equatable { let store: String; let text: String; var members: [Member] }

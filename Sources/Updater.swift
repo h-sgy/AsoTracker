@@ -42,6 +42,21 @@ enum Updater {
         throw AppStoreSearch.Throttled()
     }
 
+    /// Records each tracked app's rating and rating count per store, at most daily. One lookup per store.
+    static func updateRatings(store: KeywordStore) async throws {
+        for (storeCode, ids) in try store.dueRatings(cutoff: Date().timeIntervalSince1970 - Schedule.hot) {
+            try Task.checkCancellation()
+            do {
+                let ratings = try await AppCatalog.ratings(ids: ids, country: storeCode)
+                try store.recordRatings(ratings, store: storeCode, at: Date().timeIntervalSince1970)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                print("skip ratings \(storeCode): \(error)")
+            }
+        }
+    }
+
     /// Refreshes Search Ads popularity for keywords older than a week, 100 terms per request.
     @MainActor
     static func updatePopularity(store: KeywordStore, web: WKWebView, progress: (Int, Int) -> Void = { _, _ in }) async throws {

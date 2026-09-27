@@ -180,7 +180,7 @@ struct ContentView: View {
         return HStack(alignment: .bottom, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(app?.name ?? "").font(.system(size: 24, weight: .bold)).lineLimit(1)
-                Text("\(library.keywords.count.formatted()) キーワード · 最終確認 \(last?.formatted(date: .abbreviated, time: .shortened) ?? "—")")
+                Text("\(library.keywords.count.formatted()) キーワード · 最終確認 \(last?.formatted(date: .abbreviated, time: .shortened) ?? "—")\(ratingText)")
                     .font(.system(size: 13)).foregroundStyle(.secondary)
             }
             Spacer()
@@ -192,6 +192,11 @@ struct ContentView: View {
                 .disabled(library.selectedAppID == nil)
                 .sheet(isPresented: $addingKeywords) { AddKeywordsSheet() }
         }
+    }
+
+    private var ratingText: String {
+        guard let r = library.rating, let v = r.value, let n = r.count else { return "" }
+        return " · ★ \(v.formatted(.number.precision(.fractionLength(1))))  \(n.formatted()) 件"
     }
 
     private var keywordTable: some View {

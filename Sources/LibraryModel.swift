@@ -12,6 +12,7 @@ final class LibraryModel {
     private(set) var stores: [String] = []
     var storeCode: String = "" { didSet { loadKeywords() } }
     private(set) var keywords: [KeywordRow] = []
+    private(set) var rating: Rating?
     var error: String?
 
     init(store: KeywordStore) {
@@ -40,8 +41,11 @@ final class LibraryModel {
     }
 
     private func loadKeywords() {
-        guard let selectedAppID else { keywords = []; return }
-        attempt { keywords = try store.keywords(appID: selectedAppID, store: storeCode) }
+        guard let selectedAppID else { keywords = []; rating = nil; return }
+        attempt {
+            keywords = try store.keywords(appID: selectedAppID, store: storeCode)
+            rating = try store.latestRating(appID: selectedAppID, store: storeCode)
+        }
     }
 
     private func attempt(_ body: () throws -> Void) {

@@ -26,6 +26,11 @@ struct KeywordRow: Identifiable, Hashable {
     var displayPopularity: Int { popularity >= 0 ? popularity : astroPopularity }
 }
 
+struct Rating: Equatable {
+    let value: Double?
+    let count: Int?
+}
+
 struct RankPoint: Identifiable {
     let date: Date
     let rank: Int
