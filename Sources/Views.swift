@@ -705,6 +705,8 @@ struct TopAppsSection: View {
 
 struct RankChart: View {
     let points: [RankPoint]
+    @State private var hovered: RankPoint?
+
     var body: some View {
         let worst = points.map(\.rank).max() ?? 1
         Chart {
@@ -719,9 +721,36 @@ struct RankChart: View {
                 PointMark(x: .value("日付", last.date), y: .value("順位", last.rank))
                     .foregroundStyle(Color.brand).symbolSize(60)
             }
+            if let h = hovered {
+                RuleMark(x: .value("日付", h.date))
+                    .foregroundStyle(Color.secondary.opacity(0.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1))
+                    .annotation(position: .top, spacing: 4, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                        VStack(spacing: 2) {
+                            Text(h.date.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(.secondary)
+                            Text("\(h.rank) 位").bold().monospacedDigit()
+                        }
+                        .font(.system(size: 11))
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Color.card, in: RoundedRectangle(cornerRadius: 6))
+                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.secondary.opacity(0.25)))
+                    }
+                PointMark(x: .value("日付", h.date), y: .value("順位", h.rank))
+                    .foregroundStyle(Color.brand).symbolSize(40)
+            }
         }
         .chartYScale(domain: .automatic(includesZero: false, reversed: true))
         .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) { AxisGridLine(); AxisValueLabel(format: .dateTime.month(.defaultDigits).day()) } }
+        .chartOverlay { proxy in
+            GeometryReader { geo in
+                Rectangle().fill(.clear).contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        guard case .active(let loc) = phase, let frame = proxy.plotFrame,
+                              let date: Date = proxy.value(atX: loc.x - geo[frame].origin.x) else { hovered = nil; return }
+                        hovered = points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }
+                    }
+            }
+        }
     }
 }
 
