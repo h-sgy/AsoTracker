@@ -58,6 +58,8 @@ final class DB {
         PRIMARY KEY(keyword_id, tag_id));
     CREATE TABLE IF NOT EXISTS ratings(app_id TEXT NOT NULL, store TEXT NOT NULL, date REAL NOT NULL, rating REAL, count INTEGER);
     CREATE INDEX IF NOT EXISTS ratings_app ON ratings(app_id, store, date);
+    CREATE TABLE IF NOT EXISTS popularity_history(store TEXT NOT NULL, text TEXT NOT NULL, date REAL NOT NULL, popularity INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS popularity_history_term ON popularity_history(store, text, date);
     """
 
     func exec(_ sql: String) throws {

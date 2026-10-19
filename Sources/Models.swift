@@ -21,6 +21,8 @@ struct KeywordRow: Identifiable, Hashable {
     var note: String
     let tags: String
     let updated: Date?
+    var rankTrend: [Int] = []        // oldest first, ranked checks only
+    var popularityTrend: [Int] = []  // oldest first
 
     /// Search Ads value when fetched, else the frozen Astro value.
     var displayPopularity: Int { popularity >= 0 ? popularity : astroPopularity }

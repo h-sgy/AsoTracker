@@ -203,12 +203,20 @@ struct ContentView: View {
         Table(rows, selection: $selection, sortOrder: $sortOrder) {
             TableColumn("キーワード", value: \.text) { Text($0.text).font(.system(size: 14, weight: .medium)).lineLimit(1) }
                 .width(min: 180, ideal: 260)
-            TableColumn("順位", value: \.rank) { RankBadge(rank: $0.rank) }.width(64)
+            TableColumn("順位", value: \.rank) { k in
+                HStack(spacing: 8) {
+                    RankBadge(rank: k.rank)
+                    Sparkline(values: k.rankTrend, reversed: true)
+                }
+            }.width(128)
             TableColumn("変化", value: \.change) { ChangeLabel(keyword: $0) }.width(64)
             TableColumn("人気度", value: \.displayPopularity) { k in
-                MeterCell(value: k.displayPopularity, color: k.popularity < 0 ? .secondary : .brand)
+                HStack(spacing: 8) {
+                    MeterCell(value: k.displayPopularity, color: k.popularity < 0 ? .secondary : .brand)
+                    Sparkline(values: k.popularityTrend)
+                }
                     .help(k.popularity < 0 ? "Astro の値（Search Ads 未取得）" : "Search Ads の人気度")
-            }.width(120)
+            }.width(176)
             TableColumn("難易度", value: \.difficulty) { k in
                 MeterCell(value: k.difficulty, color: k.difficulty >= 60 ? .down : k.difficulty >= 40 ? .amber : .secondary)
             }.width(120)
@@ -538,6 +546,30 @@ struct MeterCell: View {
             Text("\(value)").font(.system(size: 13)).monospacedDigit().foregroundStyle(.secondary)
                 .frame(width: 26, alignment: .trailing)
         }
+    }
+}
+
+/// Tiny trend line for a table cell. `reversed` puts small values on top (ranks). Blank under two points.
+struct Sparkline: View {
+    let values: [Int]
+    var reversed = false
+
+    var body: some View {
+        Canvas { ctx, size in
+            guard values.count >= 2, let lo = values.min(), let hi = values.max() else { return }
+            let span = CGFloat(max(hi - lo, 1))
+            func point(_ i: Int) -> CGPoint {
+                let t = CGFloat(values[i] - lo) / span
+                return CGPoint(x: size.width * CGFloat(i) / CGFloat(values.count - 1),
+                               y: 2 + (size.height - 4) * (reversed ? t : 1 - t))
+            }
+            var path = Path()
+            path.move(to: point(0))
+            for i in 1..<values.count { path.addLine(to: point(i)) }
+            ctx.stroke(path, with: .color(.brand), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+            ctx.fill(Path(ellipseIn: CGRect(origin: point(values.count - 1), size: .zero).insetBy(dx: -2, dy: -2)), with: .color(.brand))
+        }
+        .frame(width: 56, height: 20)
     }
 }
 

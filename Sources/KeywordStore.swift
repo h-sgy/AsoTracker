@@ -69,7 +69,27 @@ final class KeywordStore {
                 appsCount: r.int(7) ?? 0, note: r.text(8) ?? "", tags: r.text(9) ?? "",
                 updated: r.double(10).map(Date.init(timeIntervalSince1970:))))
         }
+        let trends = try trends(appID: appID, store: store)
+        for i in rows.indices {
+            rows[i].rankTrend = trends.rank[rows[i].id] ?? []
+            rows[i].popularityTrend = trends.popularity[rows[i].text] ?? []
+        }
         return rows.sorted { $0.rank < $1.rank }
+    }
+
+    /// Recent history for the table's sparklines: rank by keyword id, popularity by term.
+    /// ponytail: 圏外 checks are dropped, so a keyword that fell out shows its last ranked stretch.
+    private func trends(appID: String, store: String, days: Double = 90) throws -> (rank: [Int: [Int]], popularity: [String: [Int]]) {
+        let since = Date().timeIntervalSince1970 - days * 86400
+        var rank: [Int: [Int]] = [:], popularity: [String: [Int]] = [:]
+        try db.query("""
+            SELECT r.keyword_id, r.rank FROM rankings r JOIN keywords k ON k.id = r.keyword_id
+            WHERE k.app_id = ? AND k.store = ? AND r.date >= ? AND r.rank < 1000 ORDER BY r.date
+            """, [appID, store, since]) { rank[$0.int(0)!, default: []].append($0.int(1)!) }
+        try db.query("SELECT text, popularity FROM popularity_history WHERE store = ? AND date >= ? ORDER BY date", [store, since]) {
+            popularity[$0.text(0)!, default: []].append($0.int(1)!)
+        }
+        return (rank, popularity)
     }
 
     /// Splits user input (lines, commas, 、) into normalized, unique keywords.
@@ -206,6 +226,7 @@ final class KeywordStore {
         try db.transaction {
             for v in values {
                 try db.run("UPDATE keywords SET popularity = ?, pop_updated = ? WHERE store = ? AND text = ?", [v.popularity, now, store, v.term])
+                try db.run("INSERT INTO popularity_history(store, text, date, popularity) VALUES (?, ?, ?, ?)", [store, v.term, now, v.popularity])
             }
         }
     }

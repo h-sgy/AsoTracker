@@ -74,6 +74,21 @@ final class KeywordStoreTests: XCTestCase {
         XCTAssertEqual(try store.dueRatings(cutoff: 300).count, 2)
     }
 
+    func testTrendsForSparklines() async throws {
+        let store = try makeStore()
+        _ = try store.addKeywords(["a"], appID: "1", store: "jp")
+        for ids in [["1"], ["x"], ["x", "1"]] {
+            try await Updater.updateRanks(store: store, search: { _, _ in .init(ids: ids, top: []) }, pause: .zero)
+            try store.db.run("UPDATE keywords SET updated = NULL") // make it due again
+        }
+        let now = Date().timeIntervalSince1970
+        try store.setPopularity([(term: "a", popularity: 20)], store: "jp", at: now)
+        try store.setPopularity([(term: "a", popularity: 35)], store: "jp", at: now)
+        let k = try XCTUnwrap(store.keywords(appID: "1", store: "jp").first)
+        XCTAssertEqual(k.rankTrend, [1, 2]) // 圏外 dropped
+        XCTAssertEqual(k.popularityTrend, [20, 35])
+    }
+
     func testDeletesCascadeToHistory() async throws {
         let store = try makeStore()
         _ = try store.addKeywords(["a", "b"], appID: "1", store: "jp")
