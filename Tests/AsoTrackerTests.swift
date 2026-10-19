@@ -43,6 +43,9 @@ final class KeywordStoreTests: XCTestCase {
         XCTAssertEqual(try store.addKeywords(["b", "c"], appID: "1", store: "jp"), 1)
         XCTAssertEqual(try store.stores(appID: "1"), ["jp"])
         XCTAssertEqual(try store.keywords(appID: "1", store: "jp").map(\.text).sorted(), ["a", "b", "c"])
+        _ = try store.addKeywords(["a"], appID: "1", store: "us")
+        XCTAssertEqual(try store.keywords(appID: "1", store: KeywordStore.allStores).map { "\($0.store)/\($0.text)" }.sorted(),
+                       ["jp/a", "jp/b", "jp/c", "us/a"])
     }
 
     func testSameTermAcrossAppsIsOneSearchAndRecordsEachRank() async throws {

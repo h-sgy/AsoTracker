@@ -10,6 +10,7 @@ struct AppRow: Identifiable, Hashable {
 
 struct KeywordRow: Identifiable, Hashable {
     let id: Int
+    let store: String
     let text: String
     let rank: Int          // 1000 = not ranked
     let prevRank: Int

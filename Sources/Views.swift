@@ -201,7 +201,15 @@ struct ContentView: View {
 
     private var keywordTable: some View {
         Table(rows, selection: $selection, sortOrder: $sortOrder) {
-            TableColumn("キーワード", value: \.text) { Text($0.text).font(.system(size: 14, weight: .medium)).lineLimit(1) }
+            TableColumn("キーワード", value: \.text) { k in
+                HStack(spacing: 6) {
+                    if library.showsAllStores {
+                        Text(k.store.uppercased()).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                            .frame(width: 24, alignment: .leading)
+                    }
+                    Text(k.text).font(.system(size: 14, weight: .medium)).lineLimit(1)
+                }
+            }
                 .width(min: 180, ideal: 260)
             TableColumn("順位", value: \.rank) { k in
                 HStack(spacing: 8) {
@@ -385,7 +393,7 @@ struct AddKeywordsSheet: View {
         }
         .padding(20)
         .frame(width: 480, height: 460)
-        .onAppear { store = library.storeCode.isEmpty ? "jp" : library.storeCode }
+        .onAppear { store = library.storeCode.isEmpty || library.showsAllStores ? "jp" : library.storeCode }
     }
 }
 
@@ -423,6 +431,7 @@ struct StorePicker: View {
 
     var body: some View {
         HStack(spacing: 4) {
+            if stores.count > 1 { segment(KeywordStore.allStores) }
             ForEach(stores.prefix(visible), id: \.self) { segment($0) }
             if stores.count > visible {
                 let rest = Array(stores.dropFirst(visible))
@@ -446,7 +455,7 @@ struct StorePicker: View {
     private func segment(_ s: String) -> some View {
         let on = s == selection
         return Button { selection = s } label: {
-            Text(s.uppercased())
+            Text(s == KeywordStore.allStores ? "すべて" : s.uppercased())
                 .font(.system(size: 13, weight: on ? .semibold : .regular))
                 .foregroundStyle(on ? .primary : .secondary)
                 .padding(.horizontal, 12)
@@ -589,7 +598,7 @@ struct KeywordDetail: View {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 6) {
-                        chip(library.storeCode.uppercased())
+                        chip(keyword.store.uppercased())
                         ForEach(keyword.tags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }, id: \.self) { chip($0) }
                     }
                     Text(keyword.text).font(.system(size: 26, weight: .bold)).textSelection(.enabled)

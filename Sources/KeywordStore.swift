@@ -54,17 +54,20 @@ final class KeywordStore {
         return rows
     }
 
+    /// Store code meaning "every store" in `keywords(appID:store:)`.
+    static let allStores = "*"
+
     func keywords(appID: String, store: String) throws -> [KeywordRow] {
         var rows: [KeywordRow] = []
         try db.query("""
             SELECT k.id, k.text, k.rank, k.prev_rank, k.popularity, k.astro_popularity, k.difficulty, k.apps_count, k.note,
                    (SELECT group_concat(t.name, ', ') FROM keyword_tags kt JOIN tags t ON t.id = kt.tag_id WHERE kt.keyword_id = k.id),
-                   k.updated
-            FROM keywords k WHERE k.app_id = ? AND k.store = ?
-            """, [appID, store]) { r in
+                   k.updated, k.store
+            FROM keywords k WHERE k.app_id = ? AND (? = '*' OR k.store = ?)
+            """, [appID, store, store]) { r in
             let rank = r.int(2) ?? 1000, prev = r.int(3) ?? rank
             rows.append(KeywordRow(
-                id: r.int(0)!, text: r.text(1)!, rank: rank, prevRank: prev, change: prev - rank,
+                id: r.int(0)!, store: r.text(11)!, text: r.text(1)!, rank: rank, prevRank: prev, change: prev - rank,
                 popularity: r.int(4) ?? -1, astroPopularity: r.int(5) ?? 0, difficulty: r.int(6) ?? 0,
                 appsCount: r.int(7) ?? 0, note: r.text(8) ?? "", tags: r.text(9) ?? "",
                 updated: r.double(10).map(Date.init(timeIntervalSince1970:))))
@@ -72,22 +75,22 @@ final class KeywordStore {
         let trends = try trends(appID: appID, store: store)
         for i in rows.indices {
             rows[i].rankTrend = trends.rank[rows[i].id] ?? []
-            rows[i].popularityTrend = trends.popularity[rows[i].text] ?? []
+            rows[i].popularityTrend = trends.popularity[rows[i].store + "\u{1}" + rows[i].text] ?? []
         }
         return rows.sorted { $0.rank < $1.rank }
     }
 
-    /// Recent history for the table's sparklines: rank by keyword id, popularity by term.
+    /// Recent history for the table's sparklines: rank by keyword id, popularity by "store\u{1}term".
     /// ponytail: 圏外 checks are dropped, so a keyword that fell out shows its last ranked stretch.
     private func trends(appID: String, store: String, days: Double = 90) throws -> (rank: [Int: [Int]], popularity: [String: [Int]]) {
         let since = Date().timeIntervalSince1970 - days * 86400
         var rank: [Int: [Int]] = [:], popularity: [String: [Int]] = [:]
         try db.query("""
             SELECT r.keyword_id, r.rank FROM rankings r JOIN keywords k ON k.id = r.keyword_id
-            WHERE k.app_id = ? AND k.store = ? AND r.date >= ? AND r.rank < 1000 ORDER BY r.date
-            """, [appID, store, since]) { rank[$0.int(0)!, default: []].append($0.int(1)!) }
-        try db.query("SELECT text, popularity FROM popularity_history WHERE store = ? AND date >= ? ORDER BY date", [store, since]) {
-            popularity[$0.text(0)!, default: []].append($0.int(1)!)
+            WHERE k.app_id = ? AND (? = '*' OR k.store = ?) AND r.date >= ? AND r.rank < 1000 ORDER BY r.date
+            """, [appID, store, store, since]) { rank[$0.int(0)!, default: []].append($0.int(1)!) }
+        try db.query("SELECT store, text, popularity FROM popularity_history WHERE (? = '*' OR store = ?) AND date >= ? ORDER BY date", [store, store, since]) {
+            popularity[$0.text(0)! + "\u{1}" + $0.text(1)!, default: []].append($0.int(2)!)
         }
         return (rank, popularity)
     }

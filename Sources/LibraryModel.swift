@@ -10,7 +10,7 @@ final class LibraryModel {
     private(set) var apps: [AppRow] = []
     var selectedAppID: String? { didSet { loadStores() } }
     private(set) var stores: [String] = []
-    var storeCode: String = "" { didSet { loadKeywords() } }
+    var storeCode: String = KeywordStore.allStores { didSet { loadKeywords() } }
     private(set) var keywords: [KeywordRow] = []
     private(set) var rating: Rating?
     var error: String?
@@ -20,6 +20,8 @@ final class LibraryModel {
         loadApps()
         selectedAppID = apps.first?.id
     }
+
+    var showsAllStores: Bool { storeCode == KeywordStore.allStores }
 
     var selectedApp: AppRow? { apps.first { $0.id == selectedAppID } }
 
@@ -36,7 +38,8 @@ final class LibraryModel {
     private func loadStores() {
         guard let selectedAppID else { stores = []; keywords = []; return }
         attempt { stores = try store.stores(appID: selectedAppID) }
-        let next = stores.contains(storeCode) ? storeCode : stores.first ?? ""
+        let fallback = stores.count > 1 ? KeywordStore.allStores : stores.first ?? ""
+        let next = stores.contains(storeCode) || storeCode == KeywordStore.allStores && stores.count > 1 ? storeCode : fallback
         if next == storeCode { loadKeywords() } else { storeCode = next }
     }
 
