@@ -74,6 +74,11 @@ final class LibraryModel {
         return result.top
     }
 
+    func setMark(_ mark: KeywordMark?, for ids: Set<Int>) {
+        attempt { try store.setMark(mark, keywordIDs: ids) }
+        for i in keywords.indices where ids.contains(keywords[i].id) { keywords[i].mark = mark }
+    }
+
     func saveNote(_ note: String, for keywordID: Int) {
         attempt { try store.setNote(note, keywordID: keywordID) }
         if let i = keywords.firstIndex(where: { $0.id == keywordID }) { keywords[i].note = note }

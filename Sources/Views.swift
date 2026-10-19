@@ -37,6 +37,20 @@ struct AsoTrackerApp: App {
 
 // MARK: - Palette
 
+extension KeywordMark {
+    var color: Color {
+        switch self {
+        case .red: .red
+        case .orange: .orange
+        case .yellow: .yellow
+        case .green: .green
+        case .blue: .blue
+        case .purple: .purple
+        case .gray: .gray
+        }
+    }
+}
+
 extension Color {
     /// Adapts to the system appearance.
     init(light: UInt32, dark: UInt32) {
@@ -132,7 +146,7 @@ struct ContentView: View {
                     TextField("キーワードを絞り込み", text: $search)
                         .textFieldStyle(.roundedBorder)
                         .controlSize(.large)
-                    Toggle("タグ付きのみ", isOn: $taggedOnly)
+                    Toggle("マーク・タグ付きのみ", isOn: $taggedOnly)
                         .toggleStyle(.button)
                         .controlSize(.large)
                 }
@@ -203,6 +217,7 @@ struct ContentView: View {
         Table(rows, selection: $selection, sortOrder: $sortOrder) {
             TableColumn("キーワード", value: \.text) { k in
                 HStack(spacing: 6) {
+                    Circle().fill(k.mark?.color ?? .clear).frame(width: 8, height: 8)
                     if library.showsAllStores {
                         Text(k.store.uppercased()).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
                             .frame(width: 24, alignment: .leading)
@@ -237,6 +252,16 @@ struct ContentView: View {
         .environment(\.defaultMinListRowHeight, 40)
         .contextMenu(forSelectionType: KeywordRow.ID.self) { ids in
             if !ids.isEmpty {
+                Menu("マーク") {
+                    ForEach(KeywordMark.allCases, id: \.self) { m in
+                        Button { library.setMark(m, for: ids) } label: {
+                            Label { Text(m.label) } icon: { Image(systemName: "circle.fill").foregroundStyle(m.color) }
+                        }
+                    }
+                    Divider()
+                    Button("マークを外す") { library.setMark(nil, for: ids) }
+                }
+                Divider()
                 Button("\(ids.count) 件のキーワードを削除…", systemImage: "trash", role: .destructive) { pendingKeywordDelete = ids }
             }
         }
@@ -252,7 +277,7 @@ struct ContentView: View {
 
     private var rows: [KeywordRow] {
         library.keywords
-            .filter { bucket.contains($0) && (!taggedOnly || !$0.tags.isEmpty) }
+            .filter { bucket.contains($0) && (!taggedOnly || $0.mark != nil || !$0.tags.isEmpty) }
             .filter { search.isEmpty || $0.text.localizedCaseInsensitiveContains(search) }
             .sorted(using: sortOrder)
     }

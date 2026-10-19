@@ -62,7 +62,7 @@ final class KeywordStore {
         try db.query("""
             SELECT k.id, k.text, k.rank, k.prev_rank, k.popularity, k.astro_popularity, k.difficulty, k.apps_count, k.note,
                    (SELECT group_concat(t.name, ', ') FROM keyword_tags kt JOIN tags t ON t.id = kt.tag_id WHERE kt.keyword_id = k.id),
-                   k.updated, k.store
+                   k.updated, k.store, k.mark
             FROM keywords k WHERE k.app_id = ? AND (? = '*' OR k.store = ?)
             """, [appID, store, store]) { r in
             let rank = r.int(2) ?? 1000, prev = r.int(3) ?? rank
@@ -70,7 +70,8 @@ final class KeywordStore {
                 id: r.int(0)!, store: r.text(11)!, text: r.text(1)!, rank: rank, prevRank: prev, change: prev - rank,
                 popularity: r.int(4) ?? -1, astroPopularity: r.int(5) ?? 0, difficulty: r.int(6) ?? 0,
                 appsCount: r.int(7) ?? 0, note: r.text(8) ?? "", tags: r.text(9) ?? "",
-                updated: r.double(10).map(Date.init(timeIntervalSince1970:))))
+                updated: r.double(10).map(Date.init(timeIntervalSince1970:)),
+                mark: r.text(12).flatMap(KeywordMark.init(rawValue:))))
         }
         let trends = try trends(appID: appID, store: store)
         for i in rows.indices {
@@ -120,6 +121,12 @@ final class KeywordStore {
     func deleteKeywords(_ ids: Set<Int>) throws {
         try db.transaction {
             for id in ids { try db.run("DELETE FROM keywords WHERE id = ?", [id]) }
+        }
+    }
+
+    func setMark(_ mark: KeywordMark?, keywordIDs: Set<Int>) throws {
+        try db.transaction {
+            for id in keywordIDs { try db.run("UPDATE keywords SET mark = ? WHERE id = ?", [mark?.rawValue, id]) }
         }
     }
 
@@ -189,7 +196,7 @@ final class KeywordStore {
         var dueKeys = Set<String>()
         try db.query("""
             SELECT k.id, k.app_id, k.store, k.text, k.rank, k.updated,
-                   EXISTS(SELECT 1 FROM keyword_tags t WHERE t.keyword_id = k.id)
+                   k.mark IS NOT NULL OR EXISTS(SELECT 1 FROM keyword_tags t WHERE t.keyword_id = k.id)
             FROM keywords k ORDER BY k.rank
             """) { r in
             let store = r.text(2)!, text = r.text(3)!

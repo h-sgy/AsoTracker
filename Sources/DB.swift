@@ -27,6 +27,7 @@ final class DB {
         try exec(DB.schema)
         try? exec("ALTER TABLE keywords ADD COLUMN top_apps TEXT") // JSON [TopApp]; fails harmlessly once added
         try? exec("ALTER TABLE apps ADD COLUMN icon TEXT")
+        try? exec("ALTER TABLE keywords ADD COLUMN mark TEXT") // KeywordMark raw value
     }
 
     deinit { sqlite3_close(handle) }

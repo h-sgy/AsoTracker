@@ -22,6 +22,7 @@ struct KeywordRow: Identifiable, Hashable {
     var note: String
     let tags: String
     let updated: Date?
+    var mark: KeywordMark?
     var rankTrend: [Int] = []        // oldest first, ranked checks only
     var popularityTrend: [Int] = []  // oldest first
 
@@ -32,6 +33,23 @@ struct KeywordRow: Identifiable, Hashable {
 struct Rating: Equatable {
     let value: Double?
     let count: Int?
+}
+
+/// Finder-style color label on a keyword.
+enum KeywordMark: String, CaseIterable {
+    case red, orange, yellow, green, blue, purple, gray
+
+    var label: String {
+        switch self {
+        case .red: "赤"
+        case .orange: "オレンジ"
+        case .yellow: "黄"
+        case .green: "緑"
+        case .blue: "青"
+        case .purple: "紫"
+        case .gray: "グレイ"
+        }
+    }
 }
 
 struct RankPoint: Identifiable {

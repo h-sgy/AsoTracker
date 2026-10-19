@@ -92,6 +92,20 @@ final class KeywordStoreTests: XCTestCase {
         XCTAssertEqual(k.popularityTrend, [20, 35])
     }
 
+    func testMarkPersistsAndMakesKeywordDaily() async throws {
+        let store = try makeStore()
+        _ = try store.addKeywords(["a"], appID: "1", store: "jp")
+        try await Updater.updateRanks(store: store, search: { _, _ in .init(ids: [], top: []) }, pause: .zero)
+        let id = try XCTUnwrap(store.keywords(appID: "1", store: "jp").first?.id)
+        try store.db.run("UPDATE keywords SET updated = ?", [Date().timeIntervalSince1970 - 86_400])
+        XCTAssertTrue(try store.dueRankGroups(now: Date().timeIntervalSince1970).isEmpty) // 圏外 → weekly
+        try store.setMark(.red, keywordIDs: [id])
+        XCTAssertEqual(try store.keywords(appID: "1", store: "jp").first?.mark, .red)
+        XCTAssertEqual(try store.dueRankGroups(now: Date().timeIntervalSince1970).count, 1) // marked → daily
+        try store.setMark(nil, keywordIDs: [id])
+        XCTAssertNil(try store.keywords(appID: "1", store: "jp").first?.mark)
+    }
+
     func testDeletesCascadeToHistory() async throws {
         let store = try makeStore()
         _ = try store.addKeywords(["a", "b"], appID: "1", store: "jp")
