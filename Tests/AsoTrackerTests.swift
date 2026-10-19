@@ -71,7 +71,7 @@ final class KeywordStoreTests: XCTestCase {
         _ = try store.addKeywords(["a"], appID: "2", store: "jp")
         _ = try store.addKeywords(["a"], appID: "1", store: "us")
         XCTAssertEqual(try store.dueRatings(cutoff: 100).mapValues { $0.sorted() }, ["jp": ["1", "2"], "us": ["1"]])
-        try store.recordRatings(["1": Rating(value: 4.5, count: 10), "2": Rating(value: nil, count: nil)], store: "jp", at: 200)
+        try store.recordRatings(["1": Rating(value: 4.5, count: 10)], for: ["1", "2"], store: "jp", at: 200) // "2" not sold in jp
         XCTAssertEqual(try store.dueRatings(cutoff: 100), ["us": ["1"]])
         XCTAssertEqual(try store.latestRating(appID: "1", store: "jp"), Rating(value: 4.5, count: 10))
         XCTAssertEqual(try store.dueRatings(cutoff: 300).count, 2)

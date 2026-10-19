@@ -42,13 +42,30 @@ enum Updater {
         throw AppStoreSearch.Throttled()
     }
 
+    /// Ranks, then ratings. Ratings still run when ranks fail (e.g. throttled), but not when cancelled.
+    @discardableResult
+    static func updateRanksAndRatings(store: KeywordStore, appID: String? = nil, limit: Int? = nil,
+                                      progress: (Int, Int) -> Void = { _, _ in }) async throws -> Int {
+        let n: Int
+        do {
+            n = try await updateRanks(store: store, appID: appID, limit: limit, progress: progress)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            try? await updateRatings(store: store)
+            throw error
+        }
+        try await updateRatings(store: store)
+        return n
+    }
+
     /// Records each tracked app's rating and rating count per store, at most daily. One lookup per store.
     static func updateRatings(store: KeywordStore) async throws {
         for (storeCode, ids) in try store.dueRatings(cutoff: Date().timeIntervalSince1970 - Schedule.hot) {
             try Task.checkCancellation()
             do {
                 let ratings = try await AppCatalog.ratings(ids: ids, country: storeCode)
-                try store.recordRatings(ratings, store: storeCode, at: Date().timeIntervalSince1970)
+                try store.recordRatings(ratings, for: ids, store: storeCode, at: Date().timeIntervalSince1970)
             } catch is CancellationError {
                 throw CancellationError()
             } catch {

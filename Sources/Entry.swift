@@ -24,11 +24,10 @@ enum Entry {
                 }
                 if args.contains("--update-ranks") {
                     let limit = args.firstIndex(of: "--limit").flatMap { Int(args[$0 + 1]) }
-                    let n = try await Updater.updateRanks(store: KeywordStore(db: db), limit: limit) { done, total in
+                    let n = try await Updater.updateRanksAndRatings(store: KeywordStore(db: db), limit: limit) { done, total in
                         if done % 50 == 0 || done == total { print("ranks \(done)/\(total)") }
                     }
                     print("checked \(n) search terms")
-                    try await Updater.updateRatings(store: KeywordStore(db: db))
                 }
                 exit(0)
             } catch {

@@ -90,7 +90,12 @@ final class KeywordStore {
             SELECT r.keyword_id, r.rank FROM rankings r JOIN keywords k ON k.id = r.keyword_id
             WHERE k.app_id = ? AND (? = '*' OR k.store = ?) AND r.date >= ? AND r.rank < 1000 ORDER BY r.date
             """, [appID, store, store, since]) { rank[$0.int(0)!, default: []].append($0.int(1)!) }
-        try db.query("SELECT store, text, popularity FROM popularity_history WHERE (? = '*' OR store = ?) AND date >= ? ORDER BY date", [store, store, since]) {
+        try db.query("""
+            SELECT p.store, p.text, p.popularity FROM popularity_history p
+            WHERE p.date >= ? AND EXISTS(SELECT 1 FROM keywords k
+                WHERE k.app_id = ? AND k.store = p.store AND k.text = p.text AND (? = '*' OR k.store = ?))
+            ORDER BY p.date
+            """, [since, appID, store, store]) {
             popularity[$0.text(0)! + "\u{1}" + $0.text(1)!, default: []].append($0.int(2)!)
         }
         return (rank, popularity)
@@ -179,10 +184,12 @@ final class KeywordStore {
         return byStore
     }
 
-    func recordRatings(_ ratings: [String: Rating], store: String, at now: Double) throws {
+    /// Records a row for every id, empty when the store didn't return the app, so it isn't due again until tomorrow.
+    func recordRatings(_ ratings: [String: Rating], for ids: [String], store: String, at now: Double) throws {
         try db.transaction {
-            for (id, r) in ratings {
-                try db.run("INSERT INTO ratings(app_id, store, date, rating, count) VALUES (?, ?, ?, ?, ?)", [id, store, now, r.value, r.count])
+            for id in ids {
+                let r = ratings[id]
+                try db.run("INSERT INTO ratings(app_id, store, date, rating, count) VALUES (?, ?, ?, ?, ?)", [id, store, now, r?.value, r?.count])
             }
         }
     }

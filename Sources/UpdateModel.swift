@@ -49,7 +49,7 @@ final class UpdateModel {
             if !busy {
                 job = Task {
                     await runRanks()
-                    if adsLoggedIn { await runPopularity() }
+                    if adsLoggedIn && !Task.isCancelled { await runPopularity() }
                 }
                 await job?.value
             }
@@ -59,8 +59,7 @@ final class UpdateModel {
 
     private func runRanks(appID: String? = nil) async {
         await run("順位") { [store] progress in
-            try await Updater.updateRanks(store: store, appID: appID, progress: progress)
-            try await Updater.updateRatings(store: store)
+            try await Updater.updateRanksAndRatings(store: store, appID: appID, progress: progress)
         }
     }
 
