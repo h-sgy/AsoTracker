@@ -293,6 +293,9 @@ struct ContentView: View {
                     ProgressView(value: Double(p.done), total: Double(max(p.total, 1)))
                         .progressViewStyle(.linear).frame(width: 120)
                     Text("\(p.label) \(p.done)/\(p.total)").font(.system(size: 12)).monospacedDigit().foregroundStyle(.secondary)
+                    Button("停止", systemImage: "stop.circle.fill") { updates.cancel() }
+                        .labelStyle(.iconOnly).buttonStyle(.borderless).help("更新を停止")
+                        .foregroundStyle(.red).imageScale(.large)
                 }
                 .padding(.horizontal, 8)
             } else if !updates.status.isEmpty {
