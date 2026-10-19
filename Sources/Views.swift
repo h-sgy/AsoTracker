@@ -126,6 +126,9 @@ struct ContentView: View {
             List(library.apps, selection: $library.selectedAppID) { app in
                 AppSidebarRow(app: app)
                     .contextMenu {
+                        Button("このアプリの順位を更新", systemImage: "arrow.clockwise") { updates.updateRanks(appID: app.id) }
+                            .disabled(updates.busy)
+                        Divider()
                         Button("アプリを削除…", systemImage: "trash", role: .destructive) { pendingAppDelete = app }
                     }
             }

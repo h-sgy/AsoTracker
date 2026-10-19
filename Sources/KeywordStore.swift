@@ -191,7 +191,8 @@ final class KeywordStore {
     struct Group: Equatable { let store: String; let text: String; var members: [Member] }
 
     /// Due keywords grouped by (store, text): one search request serves every app tracking that term.
-    func dueRankGroups(now: Double) throws -> [Group] {
+    /// With `appID`, every term that app tracks is due regardless of schedule.
+    func dueRankGroups(now: Double, appID: String? = nil) throws -> [Group] {
         var groups: [String: Group] = [:]
         var dueKeys = Set<String>()
         try db.query("""
@@ -202,7 +203,8 @@ final class KeywordStore {
             let store = r.text(2)!, text = r.text(3)!
             let key = store + "\u{1}" + text
             groups[key, default: Group(store: store, text: text, members: [])].members.append(Member(id: r.int(0)!, appID: r.text(1)!))
-            if Schedule.isRankDue(rank: r.int(4), tagged: r.int(6) == 1, updated: r.double(5), now: now) { dueKeys.insert(key) }
+            let due = appID.map { $0 == r.text(1) } ?? Schedule.isRankDue(rank: r.int(4), tagged: r.int(6) == 1, updated: r.double(5), now: now)
+            if due { dueKeys.insert(key) }
         }
         return dueKeys.compactMap { groups[$0] }
     }

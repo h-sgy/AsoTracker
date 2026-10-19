@@ -106,6 +106,16 @@ final class KeywordStoreTests: XCTestCase {
         XCTAssertNil(try store.keywords(appID: "1", store: "jp").first?.mark)
     }
 
+    func testUpdateOneAppIgnoresSchedule() async throws {
+        let store = try makeStore()
+        _ = try store.addKeywords(["a", "b"], appID: "1", store: "jp")
+        _ = try store.addKeywords(["c"], appID: "2", store: "jp")
+        try await Updater.updateRanks(store: store, search: { _, _ in .init(ids: ["1"], top: []) }, pause: .zero)
+        let now = Date().timeIntervalSince1970
+        XCTAssertTrue(try store.dueRankGroups(now: now).isEmpty)
+        XCTAssertEqual(try store.dueRankGroups(now: now, appID: "1").map(\.text).sorted(), ["a", "b"])
+    }
+
     func testDeletesCascadeToHistory() async throws {
         let store = try makeStore()
         _ = try store.addKeywords(["a", "b"], appID: "1", store: "jp")

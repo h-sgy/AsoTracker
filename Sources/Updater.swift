@@ -3,14 +3,14 @@ import WebKit
 
 /// Update jobs shared by the app and the CLI: fetch from the network, record through the store.
 enum Updater {
-    /// Checks due rankings sequentially. Returns the number of search requests made.
+    /// Checks due rankings sequentially (or all of `appID`'s now). Returns the number of search requests made.
     /// ponytail: one request at a time with a fixed pause; parallelize per store if runs get too long.
     @discardableResult
-    static func updateRanks(store: KeywordStore, limit: Int? = nil,
+    static func updateRanks(store: KeywordStore, appID: String? = nil, limit: Int? = nil,
                             search: (String, String) async throws -> AppStoreSearch.SearchResult = AppStoreSearch.search,
                             pause: Duration = .milliseconds(400),
                             progress: (Int, Int) -> Void = { _, _ in }) async throws -> Int {
-        var groups = try store.dueRankGroups(now: Date().timeIntervalSince1970)
+        var groups = try store.dueRankGroups(now: Date().timeIntervalSince1970, appID: appID)
         if let limit { groups = Array(groups.prefix(limit)) }
         for (i, g) in groups.enumerated() {
             try Task.checkCancellation()

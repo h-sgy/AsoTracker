@@ -29,9 +29,10 @@ final class UpdateModel {
         }
     }
 
-    func updateRanks() {
+    /// With `appID`, checks every keyword of that app now instead of only the due ones.
+    func updateRanks(appID: String? = nil) {
         guard !busy else { return }
-        job = Task { await runRanks() }
+        job = Task { await runRanks(appID: appID) }
     }
 
     func updatePopularity() {
@@ -56,9 +57,9 @@ final class UpdateModel {
         }
     }
 
-    private func runRanks() async {
+    private func runRanks(appID: String? = nil) async {
         await run("順位") { [store] progress in
-            try await Updater.updateRanks(store: store, progress: progress)
+            try await Updater.updateRanks(store: store, appID: appID, progress: progress)
             try await Updater.updateRatings(store: store)
         }
     }
