@@ -14,6 +14,7 @@ final class UpdateModel {
     private(set) var busy = false
     private(set) var progress: (label: String, done: Int, total: Int)?
     private(set) var status = ""
+    private(set) var nextAuto: Date?
     var error: String?
 
     @ObservationIgnored private var job: Task<Void, Never>?
@@ -43,6 +44,12 @@ final class UpdateModel {
 
     func cancel() { job?.cancel() }
 
+    /// Last result plus when the next automatic check runs, so an idle hour doesn't look stalled.
+    var statusLine: String {
+        let next = nextAuto.map { "次回 \($0.formatted(date: .omitted, time: .shortened))" }
+        return [status, next].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
     /// Runs due updates now and then hourly while the app is open.
     func autoUpdate() async {
         while !Task.isCancelled {
@@ -53,6 +60,7 @@ final class UpdateModel {
                 }
                 await job?.value
             }
+            nextAuto = Date(timeIntervalSinceNow: 3600)
             try? await Task.sleep(for: .seconds(3600))
         }
     }

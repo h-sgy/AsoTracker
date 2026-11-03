@@ -182,40 +182,6 @@ enum ConnectAPI {
         return count
     }
 
-    struct Review { let date: Date; let store: String?; let rating: Int }
-
-    /// Every written review's date, store (nil outside tracked stores) and stars, for rebuilding history.
-    static func reviews(appID: String, token: String) async throws -> [Review] {
-        struct Page: Decodable {
-            let data: [Item]; let links: Links
-            struct Item: Decodable { let attributes: Attributes }
-            struct Attributes: Decodable { let createdDate: String; let territory: String?; let rating: Int }
-            struct Links: Decodable { let next: String? }
-        }
-        let stores = Dictionary(uniqueKeysWithValues: territories.map { ($0.value, $0.key) })
-        var next: URL? = url("/v1/apps/\(appID)/customerReviews", ["limit": "200", "fields[customerReviews]": "createdDate,territory,rating"])
-        var result: [Review] = []
-        while let u = next {
-            let page: Page = try await get(u, token: token)
-            result += page.data.compactMap { i in
-                parseDate(i.attributes.createdDate).map {
-                    Review(date: $0, store: i.attributes.territory.flatMap { stores[$0] }, rating: i.attributes.rating)
-                }
-            }
-            next = page.links.next.flatMap(URL.init(string:))
-        }
-        return result
-    }
-
-    private static let plainISO = ISO8601DateFormatter()
-    private static let fractionalISO: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions.insert(.withFractionalSeconds)
-        return f
-    }()
-
-    static func parseDate(_ s: String) -> Date? { plainISO.date(from: s) ?? fractionalISO.date(from: s) }
-
     private static func url(_ path: String, _ query: [String: String]) -> URL {
         var comps = URLComponents(string: "https://api.appstoreconnect.apple.com" + path)!
         comps.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }

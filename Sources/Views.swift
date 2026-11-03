@@ -260,7 +260,6 @@ struct ContentView: View {
                         HStack(spacing: 14) {
                             (Text("★ ").foregroundStyle(ratingColor(v)) + Text(v.formatted(.number.precision(.fractionLength(1)))).bold())
                             Text("評価 ") + Text(n.formatted()).bold() + Text(" 件") + change(r.countChange)
-                            if let reviews = r.reviews { Text("レビュー ") + Text(reviews.formatted()).bold() + Text(" 件") + change(r.reviewsChange) }
                             Image(systemName: "chart.xyaxis.line").foregroundStyle(.secondary)
                         }
                         .font(.system(size: 14)).monospacedDigit()
@@ -269,7 +268,7 @@ struct ContentView: View {
                         .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
-                    .help("評価数とレビュー数の推移")
+                    .help("評価数の推移")
                     .popover(isPresented: $showingRatingHistory, arrowEdge: .bottom) { RatingHistoryView() }
                     .padding(.top, 2)
                 }
@@ -377,8 +376,8 @@ struct ContentView: View {
                         .foregroundStyle(.red).imageScale(.large)
                 }
                 .padding(.horizontal, 8)
-            } else if !updates.status.isEmpty {
-                Text(updates.status).font(.system(size: 12)).foregroundStyle(.secondary)
+            } else if !updates.statusLine.isEmpty {
+                Text(updates.statusLine).font(.system(size: 12)).foregroundStyle(.secondary)
             }
         }
         ToolbarItemGroup(placement: .primaryAction) {
@@ -854,21 +853,9 @@ struct TopAppsSection: View {
     }
 }
 
-extension ReviewTone {
-    var color: Color {
-        switch self {
-        case .good: .up
-        case .neutral: .gray
-        case .bad: .down
-        }
-    }
-}
-
-/// Popover from the rating badge: rating count and written reviews (by stars) over time.
+/// Popover from the rating badge: rating count over time.
 struct RatingHistoryView: View {
     @Environment(LibraryModel.self) private var library
-    @State private var reviews: [CountPoint]?
-    @State private var reviewError: String?
 
     var body: some View {
         let ratings = library.ratingHistory()
@@ -889,27 +876,9 @@ struct RatingHistoryView: View {
                     .frame(height: 150)
                 }
             }
-            VStack(alignment: .leading, spacing: 6) {
-                heading("レビュー数", reviews.map { $0.suffix(ReviewTone.allCases.count).reduce(0) { $0 + $1.count } })
-                if let reviews, !reviews.isEmpty {
-                    Chart(reviews) { p in
-                        AreaMark(x: .value("日付", p.date), y: .value("件数", p.count))
-                            .foregroundStyle(by: .value("評価", p.tone?.label ?? ""))
-                            .interpolationMethod(.stepEnd)
-                    }
-                    .chartForegroundStyleScale(domain: ReviewTone.allCases.map(\.label), range: ReviewTone.allCases.map(\.color))
-                    .chartXAxis { dateAxis }
-                    .frame(height: 150)
-                } else {
-                    placeholder(reviews != nil ? "レビューはまだありません" : reviewError ?? "読み込み中…")
-                }
-            }
         }
         .padding(20)
         .frame(width: 520)
-        .task {
-            do { reviews = try await library.reviewHistory() } catch { reviewError = "\(error)" }
-        }
     }
 
     private var dateAxis: some AxisContent {
