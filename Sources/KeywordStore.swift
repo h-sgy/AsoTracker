@@ -191,6 +191,21 @@ final class KeywordStore {
         return found
     }
 
+    /// Rating count per calendar day; with `allStores`, each store's latest value carried forward and summed.
+    func ratingCountHistory(appID: String, store: String) throws -> [CountPoint] {
+        var latest: [String: Int] = [:], points: [CountPoint] = [], day: Date?
+        func emit() { if let day { points.append(CountPoint(date: day, count: latest.values.reduce(0, +))) } }
+        try db.query("SELECT store, date, count FROM ratings WHERE app_id = ? AND (? = '*' OR store = ?) AND count IS NOT NULL ORDER BY date",
+                     [appID, store, store]) { r in
+            let d = Calendar.current.startOfDay(for: Date(timeIntervalSince1970: r.double(1)!))
+            if d != day { emit() }
+            day = d
+            latest[r.text(0)!] = r.int(2)!
+        }
+        emit()
+        return points
+    }
+
     // MARK: - Update bookkeeping
 
     /// App ids per store whose rating was last recorded before `cutoff` (or never).

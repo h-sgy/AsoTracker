@@ -55,6 +55,48 @@ enum KeywordMark: String, CaseIterable {
     }
 }
 
+/// One day's value in a count chart; `tone` splits review counts by stars.
+struct CountPoint: Identifiable, Equatable {
+    let date: Date
+    let count: Int
+    var tone: ReviewTone? = nil
+    var id: String { "\(date.timeIntervalSince1970)-\(tone?.rawValue ?? "")" }
+}
+
+/// Good / middling / bad review by stars.
+enum ReviewTone: String, CaseIterable {
+    case good, neutral, bad
+
+    init(rating: Int) { self = rating >= 4 ? .good : rating == 3 ? .neutral : .bad }
+
+    var label: String {
+        switch self {
+        case .good: "★4–5"
+        case .neutral: "★3"
+        case .bad: "★1–2"
+        }
+    }
+
+    /// Running totals per calendar day and tone (every tone at every day, for stacking), carried to `now`.
+    static func cumulative(_ reviews: [(date: Date, rating: Int)], now: Date = Date()) -> [CountPoint] {
+        var totals = Dictionary(uniqueKeysWithValues: allCases.map { ($0, 0) })
+        var points: [CountPoint] = [], day: Date?
+        func emit(_ d: Date) { points += allCases.map { CountPoint(date: d, count: totals[$0]!, tone: $0) } }
+        for r in reviews.sorted(by: { $0.date < $1.date }) {
+            let d = Calendar.current.startOfDay(for: r.date)
+            if let day, d != day { emit(day) }
+            day = d
+            totals[ReviewTone(rating: r.rating)]! += 1
+        }
+        if let day {
+            emit(day)
+            let today = Calendar.current.startOfDay(for: now)
+            if today > day { emit(today) }
+        }
+        return points
+    }
+}
+
 struct RankPoint: Identifiable {
     let date: Date
     let rank: Int

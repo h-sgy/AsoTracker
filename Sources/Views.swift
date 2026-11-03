@@ -174,6 +174,7 @@ struct ContentView: View {
     @State private var taggedOnly = false
     @State private var addingApp = false
     @State private var addingKeywords = false
+    @State private var showingRatingHistory = false
 
     var body: some View {
         @Bindable var library = library
@@ -255,14 +256,21 @@ struct ContentView: View {
                 Text("\(library.keywords.count.formatted()) キーワード · 最終確認 \(last?.formatted(date: .abbreviated, time: .shortened) ?? "—")")
                     .font(.system(size: 13)).foregroundStyle(.secondary)
                 if let r = library.rating, let v = r.value, let n = r.count {
-                    HStack(spacing: 14) {
-                        (Text("★ ").foregroundStyle(Color.gold) + Text(v.formatted(.number.precision(.fractionLength(1)))).bold())
-                        Text("評価 ") + Text(n.formatted()).bold() + Text(" 件") + change(r.countChange)
-                        if let reviews = r.reviews { Text("レビュー ") + Text(reviews.formatted()).bold() + Text(" 件") + change(r.reviewsChange) }
+                    Button { showingRatingHistory = true } label: {
+                        HStack(spacing: 14) {
+                            (Text("★ ").foregroundStyle(ratingColor(v)) + Text(v.formatted(.number.precision(.fractionLength(1)))).bold())
+                            Text("評価 ") + Text(n.formatted()).bold() + Text(" 件") + change(r.countChange)
+                            if let reviews = r.reviews { Text("レビュー ") + Text(reviews.formatted()).bold() + Text(" 件") + change(r.reviewsChange) }
+                            Image(systemName: "chart.xyaxis.line").foregroundStyle(.secondary)
+                        }
+                        .font(.system(size: 14)).monospacedDigit()
+                        .padding(.horizontal, 12).padding(.vertical, 4)
+                        .background(ratingColor(v).opacity(0.18), in: Capsule())
+                        .contentShape(Capsule())
                     }
-                    .font(.system(size: 14)).monospacedDigit()
-                    .padding(.horizontal, 12).padding(.vertical, 4)
-                    .background(Color.gold.opacity(0.18), in: Capsule())
+                    .buttonStyle(.plain)
+                    .help("評価数とレビュー数の推移")
+                    .popover(isPresented: $showingRatingHistory, arrowEdge: .bottom) { RatingHistoryView() }
                     .padding(.top, 2)
                 }
             }
@@ -276,6 +284,9 @@ struct ContentView: View {
                 .sheet(isPresented: $addingKeywords) { AddKeywordsSheet() }
         }
     }
+
+    /// Badge color by average stars: yellow from 4.0, orange from 3.0, red below.
+    private func ratingColor(_ v: Double) -> Color { v >= 4 ? .gold : v >= 3 ? .orange : .red }
 
     /// " +3" / " −2" since the previous record; empty when unchanged or unknown.
     private func change(_ d: Int?) -> Text {
@@ -840,6 +851,82 @@ struct TopAppsSection: View {
                 }
             }
         }
+    }
+}
+
+extension ReviewTone {
+    var color: Color {
+        switch self {
+        case .good: .up
+        case .neutral: .gray
+        case .bad: .down
+        }
+    }
+}
+
+/// Popover from the rating badge: rating count and written reviews (by stars) over time.
+struct RatingHistoryView: View {
+    @Environment(LibraryModel.self) private var library
+    @State private var reviews: [CountPoint]?
+    @State private var reviewError: String?
+
+    var body: some View {
+        let ratings = library.ratingHistory()
+        VStack(alignment: .leading, spacing: 18) {
+            Text(library.showsAllStores ? "全ストア合計" : library.storeCode.uppercased()).font(.headline)
+            VStack(alignment: .leading, spacing: 6) {
+                heading("評価数", ratings.last?.count)
+                if ratings.isEmpty {
+                    placeholder("記録がありません")
+                } else {
+                    Chart(ratings) { p in
+                        LineMark(x: .value("日付", p.date), y: .value("件数", p.count))
+                            .interpolationMethod(.stepEnd)
+                            .foregroundStyle(Color.brand)
+                    }
+                    .chartYScale(domain: .automatic(includesZero: false))
+                    .chartXAxis { dateAxis }
+                    .frame(height: 150)
+                }
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                heading("レビュー数", reviews.map { $0.suffix(ReviewTone.allCases.count).reduce(0) { $0 + $1.count } })
+                if let reviews, !reviews.isEmpty {
+                    Chart(reviews) { p in
+                        AreaMark(x: .value("日付", p.date), y: .value("件数", p.count))
+                            .foregroundStyle(by: .value("評価", p.tone?.label ?? ""))
+                            .interpolationMethod(.stepEnd)
+                    }
+                    .chartForegroundStyleScale(domain: ReviewTone.allCases.map(\.label), range: ReviewTone.allCases.map(\.color))
+                    .chartXAxis { dateAxis }
+                    .frame(height: 150)
+                } else {
+                    placeholder(reviews != nil ? "レビューはまだありません" : reviewError ?? "読み込み中…")
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
+        .task {
+            do { reviews = try await library.reviewHistory() } catch { reviewError = "\(error)" }
+        }
+    }
+
+    private var dateAxis: some AxisContent {
+        AxisMarks(values: .automatic(desiredCount: 5)) { AxisGridLine(); AxisValueLabel(format: .dateTime.year(.twoDigits).month(.defaultDigits)) }
+    }
+
+    private func heading(_ title: String, _ latest: Int?) -> some View {
+        HStack {
+            Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+            Spacer()
+            if let latest { Text("\(latest.formatted()) 件").font(.system(size: 13, weight: .bold)).monospacedDigit() }
+        }
+    }
+
+    private func placeholder(_ text: String) -> some View {
+        Text(text).font(.system(size: 12)).foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, minHeight: 150)
     }
 }
 

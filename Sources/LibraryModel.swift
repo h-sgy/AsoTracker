@@ -62,6 +62,22 @@ final class LibraryModel {
         return (try? store.history(keywordID: keywordID, since: since)) ?? []
     }
 
+    /// Rating count per day for the selected app and store.
+    func ratingHistory() -> [CountPoint] {
+        guard let selectedAppID else { return [] }
+        return (try? store.ratingCountHistory(appID: selectedAppID, store: storeCode)) ?? []
+    }
+
+    /// Written reviews per day by tone, rebuilt from App Store Connect.
+    /// "すべて" covers the app's tracked stores, matching the header total.
+    func reviewHistory() async throws -> [CountPoint] {
+        guard let appID = selectedAppID else { return [] }
+        guard let c = ConnectAPI.credentials else { throw DBError(description: "設定（⌘,）で App Store Connect API を設定すると表示できます") }
+        let stores = showsAllStores ? Set(self.stores) : [storeCode]
+        let reviews = try await ConnectAPI.reviews(appID: appID, token: ConnectAPI.token(c))
+        return ReviewTone.cumulative(reviews.filter { $0.store.map(stores.contains) ?? false }.map { ($0.date, $0.rating) })
+    }
+
     func topApps(for keywordID: Int) -> [TopApp] {
         (try? store.topApps(keywordID: keywordID)) ?? []
     }
