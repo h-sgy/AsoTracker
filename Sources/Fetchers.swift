@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import WebKit
 
@@ -125,6 +126,90 @@ enum AppCatalog {
         let (data, _) = try await URLSession.shared.data(from: url)
         return try JSONDecoder().decode(Response.self, from: data).results
     }
+}
+
+/// App Store Connect API: written-review count per store for the key owner's apps.
+/// Credentials come from Settings; the .p8 is read from wherever the user keeps it, never copied.
+enum ConnectAPI {
+    struct Credentials { let issuer: String; let keyID: String; let keyPath: String }
+
+    static var credentials: Credentials? {
+        let d = UserDefaults.standard
+        guard let issuer = d.string(forKey: "ascIssuer"), let keyID = d.string(forKey: "ascKeyID"),
+              let path = d.string(forKey: "ascKeyPath"), ![issuer, keyID, path].contains(where: \.isEmpty) else { return nil }
+        return Credentials(issuer: issuer, keyID: keyID, keyPath: path)
+    }
+
+    /// ES256 JWT valid for 15 minutes (Apple allows at most 20).
+    static func token(_ c: Credentials, now: Date = Date()) throws -> String {
+        let key = try P256.Signing.PrivateKey(pemRepresentation: String(contentsOfFile: c.keyPath, encoding: .utf8))
+        func b64(_ d: Data) -> String {
+            d.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: "=", with: "")
+        }
+        func json(_ o: [String: Any]) throws -> String { b64(try JSONSerialization.data(withJSONObject: o)) }
+        let iat = Int(now.timeIntervalSince1970)
+        let signed = try json(["alg": "ES256", "kid": c.keyID, "typ": "JWT"]) + "."
+            + json(["iss": c.issuer, "iat": iat, "exp": iat + 900, "aud": "appstoreconnect-v1"])
+        return signed + "." + b64(try key.signature(for: Data(signed.utf8)).rawRepresentation)
+    }
+
+    /// Ids of the apps the key's account owns. ponytail: first page only (200 apps).
+    static func ownAppIDs(token: String) async throws -> Set<String> {
+        struct Page: Decodable { let data: [Item]; struct Item: Decodable { let id: String } }
+        let page: Page = try await get(url("/v1/apps", ["limit": "200", "fields[apps]": "bundleId"]), token: token)
+        return Set(page.data.map(\.id))
+    }
+
+    /// Written reviews of an app in one store.
+    static func reviewCount(appID: String, store: String, token: String) async throws -> Int {
+        guard let territory = territories[store] else { throw DBError(description: "unknown store \(store)") }
+        struct Page: Decodable {
+            let data: [Item]; let links: Links; let meta: Meta?
+            struct Item: Decodable { let id: String }
+            struct Links: Decodable { let next: String? }
+            struct Meta: Decodable { let paging: Paging; struct Paging: Decodable { let total: Int? } }
+        }
+        var page: Page = try await get(url("/v1/apps/\(appID)/customerReviews",
+                                           ["filter[territory]": territory, "limit": "200", "fields[customerReviews]": "rating"]), token: token)
+        // `total` is optional in Apple's schema; count the pages when it's missing.
+        if let total = page.meta?.paging.total { return total }
+        var count = page.data.count
+        while let next = page.links.next.flatMap(URL.init(string:)) {
+            page = try await get(next, token: token)
+            count += page.data.count
+        }
+        return count
+    }
+
+    private static func url(_ path: String, _ query: [String: String]) -> URL {
+        var comps = URLComponents(string: "https://api.appstoreconnect.apple.com" + path)!
+        comps.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
+        return comps.url!
+    }
+
+    private static func get<T: Decodable>(_ url: URL, token: String) async throws -> T {
+        var req = URLRequest(url: url, timeoutInterval: 30)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else {
+            throw DBError(description: "App Store Connect HTTP \(status): \(String(decoding: data.prefix(300), as: UTF8.self))")
+        }
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    /// ISO 3166-1 alpha-3 territory per tracked store (all in the API's allowed values as of 2026-11).
+    static let territories: [String: String] = [
+        "ae": "ARE", "ar": "ARG", "au": "AUS", "bo": "BOL", "br": "BRA", "ca": "CAN", "ch": "CHE",
+        "cl": "CHL", "cn": "CHN", "co": "COL", "cr": "CRI", "cz": "CZE", "de": "DEU", "dk": "DNK",
+        "do": "DOM", "ec": "ECU", "es": "ESP", "fi": "FIN", "fr": "FRA", "gb": "GBR", "gr": "GRC",
+        "gt": "GTM", "hk": "HKG", "hn": "HND", "hr": "HRV", "hu": "HUN", "id": "IDN", "ie": "IRL",
+        "il": "ISR", "in": "IND", "it": "ITA", "jp": "JPN", "kg": "KGZ", "kr": "KOR", "mx": "MEX",
+        "my": "MYS", "nl": "NLD", "no": "NOR", "pa": "PAN", "pe": "PER", "pl": "POL", "pt": "PRT",
+        "py": "PRY", "ro": "ROU", "ru": "RUS", "sa": "SAU", "se": "SWE", "sk": "SVK", "sv": "SLV",
+        "th": "THA", "tr": "TUR", "tw": "TWN", "ua": "UKR", "us": "USA", "uz": "UZB", "vn": "VNM",
+    ]
 }
 
 /// Tiered schedule: keywords that matter get checked daily, the long tail weekly.

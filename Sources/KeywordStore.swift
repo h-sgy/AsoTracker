@@ -166,8 +166,8 @@ final class KeywordStore {
     /// Latest recorded rating for an app in one store.
     func latestRating(appID: String, store: String) throws -> Rating? {
         var found: Rating?
-        try db.query("SELECT rating, count FROM ratings WHERE app_id = ? AND store = ? ORDER BY date DESC LIMIT 1", [appID, store]) {
-            found = Rating(value: $0.double(0), count: $0.int(1))
+        try db.query("SELECT rating, count, reviews FROM ratings WHERE app_id = ? AND store = ? ORDER BY date DESC LIMIT 1", [appID, store]) {
+            found = Rating(value: $0.double(0), count: $0.int(1), reviews: $0.int(2))
         }
         return found
     }
@@ -189,7 +189,8 @@ final class KeywordStore {
         try db.transaction {
             for id in ids {
                 let r = ratings[id]
-                try db.run("INSERT INTO ratings(app_id, store, date, rating, count) VALUES (?, ?, ?, ?, ?)", [id, store, now, r?.value, r?.count])
+                try db.run("INSERT INTO ratings(app_id, store, date, rating, count, reviews) VALUES (?, ?, ?, ?, ?, ?)",
+                           [id, store, now, r?.value, r?.count, r?.reviews])
             }
         }
     }

@@ -59,18 +59,40 @@ enum Updater {
         return n
     }
 
-    /// Records each tracked app's rating and rating count per store, at most daily. One lookup per store.
+    /// Records each tracked app's rating and rating count per store, at most daily. One lookup per store,
+    /// plus, when App Store Connect is set up, one review-count request per owned app sold there.
     static func updateRatings(store: KeywordStore) async throws {
-        for (storeCode, ids) in try store.dueRatings(cutoff: Date().timeIntervalSince1970 - Schedule.hot) {
+        let due = try store.dueRatings(cutoff: Date().timeIntervalSince1970 - Schedule.hot)
+        guard !due.isEmpty else { return }
+        let connect = await connectSession()
+        for (storeCode, ids) in due {
             try Task.checkCancellation()
             do {
-                let ratings = try await AppCatalog.ratings(ids: ids, country: storeCode)
+                var ratings = try await AppCatalog.ratings(ids: ids, country: storeCode)
+                if let connect {
+                    for id in ids where connect.own.contains(id) && ratings[id] != nil {
+                        do { ratings[id]?.reviews = try await ConnectAPI.reviewCount(appID: id, store: storeCode, token: connect.token) }
+                        catch { print("skip reviews \(storeCode)/\(id): \(error)") }
+                    }
+                }
                 try store.recordRatings(ratings, for: ids, store: storeCode, at: Date().timeIntervalSince1970)
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
                 print("skip ratings \(storeCode): \(error)")
             }
+        }
+    }
+
+    /// Token and owned app ids, or nil when App Store Connect isn't set up or rejects the key.
+    private static func connectSession() async -> (token: String, own: Set<String>)? {
+        guard let c = ConnectAPI.credentials else { return nil }
+        do {
+            let token = try ConnectAPI.token(c)
+            return (token, try await ConnectAPI.ownAppIDs(token: token))
+        } catch {
+            print("skip reviews: \(error)")
+            return nil
         }
     }
 

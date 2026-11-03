@@ -1,6 +1,7 @@
 import AppKit
 import Charts
 import SwiftUI
+import UniformTypeIdentifiers
 import WebKit
 
 struct AsoTrackerApp: App {
@@ -31,6 +32,60 @@ struct AsoTrackerApp: App {
         Window("Search Ads", id: "ads") {
             WebView(web: updates.web)
                 .frame(minWidth: 900, minHeight: 700)
+        }
+        Settings { ConnectSettings() }
+    }
+}
+
+/// App Store Connect API key for review counts. Ids go to UserDefaults; the .p8 stays where it is.
+struct ConnectSettings: View {
+    @AppStorage("ascIssuer") private var issuer = ""
+    @AppStorage("ascKeyID") private var keyID = ""
+    @AppStorage("ascKeyPath") private var keyPath = ""
+    @State private var picking = false
+    @State private var status = ""
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("Issuer ID", text: $issuer)
+                TextField("キー ID", text: $keyID)
+                LabeledContent("秘密鍵（.p8）") {
+                    HStack {
+                        Text(keyPath.isEmpty ? "未選択" : (keyPath as NSString).lastPathComponent).foregroundStyle(.secondary)
+                        Button("選択…") { picking = true }
+                    }
+                }
+                HStack {
+                    Button("接続を確認", action: check)
+                    Text(status).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(3)
+                }
+            } header: {
+                Text("App Store Connect API")
+            } footer: {
+                Text("自分のアプリのレビュー数を毎日記録します。キーは App Store Connect の「ユーザとアクセス」>「統合」で作成します。.p8 はコピーせず、選んだ場所から読み込みます。")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 520)
+        .fileImporter(isPresented: $picking, allowedContentTypes: [UTType(filenameExtension: "p8") ?? .data]) { result in
+            guard case .success(let url) = result else { return }
+            keyPath = url.path
+            if keyID.isEmpty, let id = url.lastPathComponent.firstMatch(of: /AuthKey_(\w+)\.p8/)?.1 { keyID = String(id) }
+        }
+    }
+
+    private func check() {
+        status = "確認中…"
+        Task {
+            do {
+                guard let c = ConnectAPI.credentials else { status = "3 項目すべて入力してください"; return }
+                let n = try await ConnectAPI.ownAppIDs(token: ConnectAPI.token(c)).count
+                status = "接続できました（アプリ \(n) 件）"
+            } catch {
+                status = "\(error)"
+            }
         }
     }
 }
@@ -214,6 +269,7 @@ struct ContentView: View {
     private var ratingText: String {
         guard let r = library.rating, let v = r.value, let n = r.count else { return "" }
         return " · ★ \(v.formatted(.number.precision(.fractionLength(1))))  \(n.formatted()) 件"
+            + (r.reviews.map { " · レビュー \($0.formatted()) 件" } ?? "")
     }
 
     private var keywordTable: some View {

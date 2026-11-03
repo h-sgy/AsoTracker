@@ -1,3 +1,4 @@
+import CryptoKit
 import XCTest
 @testable import AsoTracker
 
@@ -71,10 +72,37 @@ final class KeywordStoreTests: XCTestCase {
         _ = try store.addKeywords(["a"], appID: "2", store: "jp")
         _ = try store.addKeywords(["a"], appID: "1", store: "us")
         XCTAssertEqual(try store.dueRatings(cutoff: 100).mapValues { $0.sorted() }, ["jp": ["1", "2"], "us": ["1"]])
-        try store.recordRatings(["1": Rating(value: 4.5, count: 10)], for: ["1", "2"], store: "jp", at: 200) // "2" not sold in jp
+        try store.recordRatings(["1": Rating(value: 4.5, count: 10, reviews: 3)], for: ["1", "2"], store: "jp", at: 200) // "2" not sold in jp
         XCTAssertEqual(try store.dueRatings(cutoff: 100), ["us": ["1"]])
-        XCTAssertEqual(try store.latestRating(appID: "1", store: "jp"), Rating(value: 4.5, count: 10))
+        XCTAssertEqual(try store.latestRating(appID: "1", store: "jp"), Rating(value: 4.5, count: 10, reviews: 3))
         XCTAssertEqual(try store.dueRatings(cutoff: 300).count, 2)
+    }
+
+    func testConnectTokenIsVerifiableES256() throws {
+        let key = P256.Signing.PrivateKey()
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("AuthKey_TEST.p8").path
+        try key.pemRepresentation.write(toFile: path, atomically: true, encoding: .utf8) // same PKCS#8 PEM as Apple's .p8
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let token = try ConnectAPI.token(.init(issuer: "iss", keyID: "KID", keyPath: path), now: Date(timeIntervalSince1970: 1000))
+        let parts = token.split(separator: ".").map { s -> Data in
+            var b = s.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+            b += String(repeating: "=", count: (4 - b.count % 4) % 4)
+            return Data(base64Encoded: b)!
+        }
+        XCTAssertEqual(parts.count, 3)
+        let header = try XCTUnwrap(JSONSerialization.jsonObject(with: parts[0]) as? [String: Any])
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: parts[1]) as? [String: Any])
+        XCTAssertEqual(header["alg"] as? String, "ES256")
+        XCTAssertEqual(header["kid"] as? String, "KID")
+        XCTAssertEqual(payload["iss"] as? String, "iss")
+        XCTAssertEqual(payload["aud"] as? String, "appstoreconnect-v1")
+        XCTAssertEqual(payload["exp"] as? Int, 1900)
+        let signed = Data(token.split(separator: ".").prefix(2).joined(separator: ".").utf8)
+        XCTAssertTrue(key.publicKey.isValidSignature(try P256.Signing.ECDSASignature(rawRepresentation: parts[2]), for: signed))
+    }
+
+    func testEveryStoreHasAConnectTerritory() {
+        XCTAssertEqual(Set(ConnectAPI.territories.keys), Set(AppStoreSearch.storefronts.keys))
     }
 
     func testTrendsForSparklines() async throws {

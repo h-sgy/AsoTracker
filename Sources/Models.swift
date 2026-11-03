@@ -33,6 +33,7 @@ struct KeywordRow: Identifiable, Hashable {
 struct Rating: Equatable {
     let value: Double?
     let count: Int?
+    var reviews: Int? = nil  // written reviews; own apps via App Store Connect only
 }
 
 /// Finder-style color label on a keyword.

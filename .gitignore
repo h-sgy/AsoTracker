@@ -12,3 +12,6 @@ xcuserdata/
 
 # macOS
 .DS_Store
+
+# App Store Connect API keys
+*.p8
