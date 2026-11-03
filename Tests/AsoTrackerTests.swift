@@ -76,6 +76,29 @@ final class KeywordStoreTests: XCTestCase {
         XCTAssertEqual(try store.dueRatings(cutoff: 100), ["us": ["1"]])
         XCTAssertEqual(try store.latestRating(appID: "1", store: "jp"), Rating(value: 4.5, count: 10, reviews: 3))
         XCTAssertEqual(try store.dueRatings(cutoff: 300).count, 2)
+        // All stores: each store's latest row, counts summed, average weighted by count.
+        try store.recordRatings(["1": Rating(value: 4.0, count: 30, reviews: 5)], for: ["1"], store: "us", at: 200)
+        XCTAssertEqual(try store.latestRating(appID: "1", store: KeywordStore.allStores), Rating(value: 4.125, count: 40, reviews: 8))
+        XCTAssertNil(try store.latestRating(appID: "9", store: KeywordStore.allStores))
+    }
+
+    func testRatingChangeSincePreviousRecord() throws {
+        let store = try makeStore()
+        let day = 86400.0
+        try store.recordRatings(["1": Rating(value: 4, count: 10, reviews: 2)], for: ["1"], store: "jp", at: 10 * day)
+        try store.recordRatings(["1": Rating(value: 4, count: 12, reviews: 3)], for: ["1"], store: "jp", at: 11 * day)
+        try store.recordRatings(["1": Rating(value: 5, count: 5)], for: ["1"], store: "us", at: 10 * day)
+        try store.recordRatings(["1": Rating(value: 5, count: 6)], for: ["1"], store: "us", at: 11 * day)
+        try store.recordRatings(["1": Rating(value: 3, count: 1)], for: ["1"], store: "dz", at: 1 * day) // stale, Astro era
+        try store.recordRatings(["1": Rating(value: 3, count: 4)], for: ["1"], store: "dz", at: 2 * day)
+        let jp = try store.latestRating(appID: "1", store: "jp")
+        XCTAssertEqual(jp?.countChange, 2)
+        XCTAssertEqual(jp?.reviewsChange, 1)
+        XCTAssertNil(try store.latestRating(appID: "1", store: "dz")?.countChange)
+        let all = try store.latestRating(appID: "1", store: KeywordStore.allStores)
+        XCTAssertEqual(all?.count, 22)        // latest of each store, dz included
+        XCTAssertEqual(all?.countChange, 3)   // jp +2, us +1; dz's old +3 left out
+        XCTAssertEqual(all?.reviewsChange, 1)
     }
 
     func testConnectTokenIsVerifiableES256() throws {

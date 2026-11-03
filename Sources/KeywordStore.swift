@@ -163,11 +163,30 @@ final class KeywordStore {
         return points
     }
 
-    /// Latest recorded rating for an app in one store.
+    /// Latest recorded rating for an app in one store; with `allStores`, each store's latest summed
+    /// (counts added, average weighted by rating count). Changes are against each store's previous
+    /// record, counting only stores refreshed in the latest update so stale stores don't repeat old moves.
     func latestRating(appID: String, store: String) throws -> Rating? {
         var found: Rating?
-        try db.query("SELECT rating, count, reviews FROM ratings WHERE app_id = ? AND store = ? ORDER BY date DESC LIMIT 1", [appID, store]) {
-            found = Rating(value: $0.double(0), count: $0.int(1), reviews: $0.int(2))
+        try db.query("""
+            WITH latest AS (
+                SELECT r.store, r.date, r.rating, r.count, r.reviews,
+                       r.date > (SELECT max(date) FROM ratings WHERE app_id = ?1) - 86400 AS fresh
+                FROM ratings r
+                WHERE r.app_id = ?1 AND (?2 = '*' OR r.store = ?2)
+                  AND r.date = (SELECT max(date) FROM ratings WHERE app_id = ?1 AND store = r.store)
+            )
+            SELECT sum(l.rating * l.count) / sum(l.count), sum(l.count), sum(l.reviews),
+                   sum(CASE WHEN l.fresh THEN l.count - (SELECT p.count FROM ratings p
+                       WHERE p.app_id = ?1 AND p.store = l.store AND p.date < l.date AND p.count IS NOT NULL
+                       ORDER BY p.date DESC LIMIT 1) END),
+                   sum(CASE WHEN l.fresh THEN l.reviews - (SELECT p.reviews FROM ratings p
+                       WHERE p.app_id = ?1 AND p.store = l.store AND p.date < l.date AND p.reviews IS NOT NULL
+                       ORDER BY p.date DESC LIMIT 1) END)
+            FROM latest l
+            HAVING count(*) > 0
+            """, [appID, store]) {
+            found = Rating(value: $0.double(0), count: $0.int(1), reviews: $0.int(2), countChange: $0.int(3), reviewsChange: $0.int(4))
         }
         return found
     }

@@ -252,8 +252,19 @@ struct ContentView: View {
         return HStack(alignment: .bottom, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(app?.name ?? "").font(.system(size: 24, weight: .bold)).lineLimit(1)
-                Text("\(library.keywords.count.formatted()) キーワード · 最終確認 \(last?.formatted(date: .abbreviated, time: .shortened) ?? "—")\(ratingText)")
+                Text("\(library.keywords.count.formatted()) キーワード · 最終確認 \(last?.formatted(date: .abbreviated, time: .shortened) ?? "—")")
                     .font(.system(size: 13)).foregroundStyle(.secondary)
+                if let r = library.rating, let v = r.value, let n = r.count {
+                    HStack(spacing: 14) {
+                        (Text("★ ").foregroundStyle(Color.gold) + Text(v.formatted(.number.precision(.fractionLength(1)))).bold())
+                        Text("評価 ") + Text(n.formatted()).bold() + Text(" 件") + change(r.countChange)
+                        if let reviews = r.reviews { Text("レビュー ") + Text(reviews.formatted()).bold() + Text(" 件") + change(r.reviewsChange) }
+                    }
+                    .font(.system(size: 14)).monospacedDigit()
+                    .padding(.horizontal, 12).padding(.vertical, 4)
+                    .background(Color.gold.opacity(0.18), in: Capsule())
+                    .padding(.top, 2)
+                }
             }
             Spacer()
             StorePicker(stores: library.stores, selection: $library.storeCode)
@@ -266,10 +277,11 @@ struct ContentView: View {
         }
     }
 
-    private var ratingText: String {
-        guard let r = library.rating, let v = r.value, let n = r.count else { return "" }
-        return " · ★ \(v.formatted(.number.precision(.fractionLength(1))))  \(n.formatted()) 件"
-            + (r.reviews.map { " · レビュー \($0.formatted()) 件" } ?? "")
+    /// " +3" / " −2" since the previous record; empty when unchanged or unknown.
+    private func change(_ d: Int?) -> Text {
+        guard let d, d != 0 else { return Text("") }
+        return Text(d > 0 ? " +\(d.formatted())" : " −\((-d).formatted())")
+            .font(.system(size: 12, weight: .semibold)).foregroundStyle(d > 0 ? Color.up : Color.down)
     }
 
     private var keywordTable: some View {

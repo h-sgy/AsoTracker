@@ -34,6 +34,8 @@ struct Rating: Equatable {
     let value: Double?
     let count: Int?
     var reviews: Int? = nil  // written reviews; own apps via App Store Connect only
+    var countChange: Int? = nil    // vs. previous record; read side only
+    var reviewsChange: Int? = nil
 }
 
 /// Finder-style color label on a keyword.
