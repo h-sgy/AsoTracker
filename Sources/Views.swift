@@ -104,6 +104,16 @@ extension KeywordMark {
         case .gray: .gray
         }
     }
+
+    /// Colored dot for menus, which draw SF Symbols as monochrome templates and ignore foregroundStyle.
+    var menuIcon: Image {
+        let fill = NSColor(color)
+        return Image(nsImage: NSImage(size: NSSize(width: 12, height: 12), flipped: false) { rect in
+            fill.setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
+            return true
+        })
+    }
 }
 
 extension Color {
@@ -336,7 +346,7 @@ struct ContentView: View {
                 Menu("マーク") {
                     ForEach(KeywordMark.allCases, id: \.self) { m in
                         Button { library.setMark(m, for: ids) } label: {
-                            Label { Text(m.label) } icon: { Image(systemName: "circle.fill").foregroundStyle(m.color) }
+                            Label { Text(m.label) } icon: { m.menuIcon }
                         }
                     }
                     Divider()
